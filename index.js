@@ -1,10 +1,11 @@
 const express = require('express');
 const PORT = process.env.PORT || 4040;
+const bodyParser = require("body-parser");
 const axios = require('axios');
 const app = express();
 const cors = require("cors");
 
-
+app.use(bodyParser.json());
 app.use(cors());
 
 
@@ -27,7 +28,7 @@ app.get('/cryptocurrencies', async (req, res) => {
 
 // Convert cryptocurrency to a selected currency
 app.post('/convert', async (req, res) => {
-  const { sourceCrypto, amount, targetCurrency } = req.query;
+  const { sourceCrypto, amount, targetCurrency } = req.body;
 
   try {
     const response = await axios.get(`https://api.coingecko.com/api/v3/simple/price`, {
@@ -37,11 +38,13 @@ app.post('/convert', async (req, res) => {
       },
     });
 
-    if (!response.data[sourceCrypto]) {
+    const data = response.data;
+
+    if (!data || !data[sourceCrypto]) {
       return res.status(404).json({ error: 'Cryptocurrency not found' });
     }
 
-    const rate = response.data[sourceCrypto][targetCurrency];
+    const rate = data[sourceCrypto][targetCurrency];
     if (!rate) {
       return res.status(404).json({ error: 'Target currency not supported' });
     }

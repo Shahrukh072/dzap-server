@@ -1,70 +1,102 @@
 const axios = require('axios');
-const app = require('./index'); 
-const supertest = require('supertest');
+const { getCryptoCurrencies, convertCryptoCurrencies } = require('./controllers/crypto.controller'); 
 
-describe('GET /cryptocurrencies endpoint', () => {
-  it('should return a list of cryptocurrencies', async () => {
-    const response = await supertest(app).get('/cryptocurrencies');
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('length');
-    expect(response.body.length).toBeGreaterThan(0);
-  });
+jest.mock('axios');
 
-  it('should handle errors gracefully', async () => {
-    // Mocking axios.get to simulate an error
-    jest.spyOn(axios, 'get').mockRejectedValue(new Error('API error'));
+describe('getCryptoCurrencies', () => {
+  test('should fetch top 100 cryptocurrencies and supported currencies', async () => {
+    const mockResponse = {
+      data: [ ],
+    };
 
-    const response = await supertest(app).get('/cryptocurrencies');
-    expect(response.status).toBe(500);
-    expect(response.body).toHaveProperty('error', 'API error');
+    axios.get.mockResolvedValueOnce(mockResponse);
+
+    const mockReq = {};
+    const mockRes = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    await getCryptoCurrencies(mockReq, mockRes);
+
+    expect(axios.get).toHaveBeenCalledWith('https://api.coingecko.com/api/v3/coins/markets', {
+      params: {
+        vs_currency: 'usd',
+        per_page: 100,
+        page: 1,
+        sparkline: false,
+      },
+    });
+    expect(mockRes.status).toHaveBeenCalledWith(200);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      success: true,
+      message: 'Cryptocurrencies and supported currencies fetched successfully',
+      data: mockResponse.data,
+    });
   });
 });
 
-
-describe('POST /convert endpoint', () => {
-    it('should convert cryptocurrency to the target currency', async () => {
-      const mockReqBody = {
-        sourceCrypto: 'bitcoin',
-        amount: 1, 
-        targetCurrency: 'usd',
-      };
-  
-      // Mocking the Coingecko API call
-      jest.spyOn(axios, 'get').mockResolvedValue({
-        data: {
-          bitcoin: {
-            usd: 45000, 
-          },
-        },
-      });
-  
-      const response = await supertest(app)
-        .post('/convert')
-        .send(mockReqBody);
-  
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('sourceCrypto', 'bitcoin');
-      expect(response.body).toHaveProperty('amount', 1);
-      expect(response.body).toHaveProperty('targetCurrency', 'usd');
-      expect(response.body).toHaveProperty('convertedAmount', 45000); 
-    });
-  
-    it('should handle errors gracefully', async () => {
-      // Simulating an error in the Coingecko API call
-      jest.spyOn(axios, 'get').mockRejectedValue(new Error('API error'));
-  
-      const mockReqBody = {
+describe('convertCryptoCurrencies', () => {
+  test('should convert cryptocurrency to a selected currency', async () => {
+    const mockReq = {
+      body: {
         sourceCrypto: 'bitcoin',
         amount: 1,
         targetCurrency: 'usd',
-      };
-  
-      const response = await supertest(app)
-        .post('/convert')
-        .send(mockReqBody);
-  
-      expect(response.status).toBe(500);
-      expect(response.body).toHaveProperty('error', 'API error');
+      },
+    };
+    const mockRes = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    const mockResponse = {
+      data: {
+        bitcoin: {
+          usd: 10000, 
+        },
+      },
+    };
+
+    axios.get.mockResolvedValueOnce(mockResponse);
+
+    await convertCryptoCurrencies(mockReq, mockRes);
+
+    expect(axios.get).toHaveBeenCalledWith('https://api.coingecko.com/api/v3/simple/price', {
+      params: {
+        ids: 'bitcoin',
+        vs_currencies: 'usd',
+      },
+    });
+
+    expect(mockRes.status).toHaveBeenCalledWith(200);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      success: true,
+      message: 'cryptoCurrency converted successfully',
+      sourceCrypto: 'bitcoin',
+      amount: 1,
+      targetCurrency: 'usd',
+      convertedAmount: 10000, 
     });
   });
-  
+
+  test('should handle missing fields', async () => {
+    const mockReq = {
+      body: {
+        
+      },
+    };
+    const mockRes = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    await convertCryptoCurrencies(mockReq, mockRes);
+
+    expect(mockRes.status).toHaveBeenCalledWith(400);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      message: 'Please enter all field (sourceCrypto, amount, targetCurrency)',
+    });
+  });
+
+});
